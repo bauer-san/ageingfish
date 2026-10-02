@@ -1,0 +1,116 @@
+Thünen north test split
+-----------------------
+n                    462
+exact agreement      31.8%
+within +/-1 year     76.6%
+mean bias (pred-ref) -0.01 years
+MAE / RMSE           1.07 / 1.42 years
+APE / CV             11.5% / 16.2%
+Bowker symmetry      chi2=44.64, df=35, p=0.127
+baseline: always 5  13.6% exact
+
+age   n   mean pred   95% CI
+  1  21        3.24   [2.23, 4.24]
+  2  32        2.66   [2.29, 3.03]
+  3  43        3.01   [2.70, 3.32]
+  4  62        4.09   [3.76, 4.42]
+  5  63        5.41   [5.16, 5.67]
+  6  55        6.17   [5.87, 6.47]
+  7  45        6.67   [6.32, 7.01]
+  8  51        7.82   [7.53, 8.11]
+  9  43        8.42   [7.95, 8.89]
+ 10  35        8.87   [8.42, 9.33]
+ 11  12        9.05   [8.50, 9.61]
+
+cod
+---
+n                    131
+exact agreement      30.5%
+within +/-1 year     69.5%
+mean bias (pred-ref) -0.16 years
+MAE / RMSE           1.24 / 1.67 years
+APE / CV             17.6% / 24.9%
+Bowker symmetry      chi2=32.01, df=28, p=0.274
+baseline: always 4  16.0% exact
+
+age   n   mean pred   95% CI
+  1  16        2.68   [1.61, 3.76]
+  2  20        2.50   [2.02, 2.97]
+  3  19        2.78   [2.24, 3.31]
+  4  21        3.66   [3.05, 4.27]
+  5  14        5.16   [4.56, 5.76]
+  6  13        5.61   [4.83, 6.38]
+  7   5        5.86   [3.57, 8.16]
+  8   6        6.82   [5.50, 8.14]
+  9  10        7.10   [5.85, 8.35]
+ 10   6        8.27   [6.43, 10.10]
+ 11   1        9.38   
+
+haddock
+-------
+n                    54
+exact agreement      18.5%
+within +/-1 year     63.0%
+mean bias (pred-ref) +0.43 years
+MAE / RMSE           1.44 / 1.86 years
+APE / CV             14.2% / 20.1%
+Bowker symmetry      chi2=32.34, df=20, p=0.0398
+baseline: always 4  18.5% exact
+
+age   n   mean pred   95% CI
+  1   2        6.23   [-7.87, 20.33]
+  2   4        3.87   [3.14, 4.61]
+  3   4        3.97   [2.78, 5.15]
+  4  10        5.31   [4.42, 6.19]
+  5  10        5.79   [5.16, 6.42]
+  6   8        6.21   [5.17, 7.25]
+  7   5        7.08   [6.18, 7.98]
+  8   3        6.60   [2.62, 10.58]
+  9   4        6.74   [5.33, 8.15]
+ 10   2        7.90   [5.55, 10.25]
+ 11   2        8.82   [6.47, 11.17]
+
+saithe
+------
+n                    253
+exact agreement      36.4%
+within +/-1 year     85.4%
+mean bias (pred-ref) -0.10 years
+MAE / RMSE           0.86 / 1.08 years
+APE / CV             7.1% / 10.0%
+Bowker symmetry      chi2=19.85, df=21, p=0.53
+baseline: always 8  16.6% exact
+
+age   n   mean pred   95% CI
+  2   3        2.53   [0.10, 4.96]
+  3  18        2.89   [2.51, 3.28]
+  4  27        3.84   [3.48, 4.20]
+  5  34        5.37   [5.03, 5.72]
+  6  31        6.33   [6.00, 6.65]
+  7  33        6.78   [6.40, 7.15]
+  8  42        8.05   [7.79, 8.31]
+  9  29        9.11   [8.75, 9.46]
+ 10  27        9.08   [8.60, 9.57]
+ 11   9        9.07   [8.30, 9.84]
+
+whiting
+-------
+n                    24
+exact agreement      20.8%
+within +/-1 year     54.2%
+mean bias (pred-ref) +0.91 years
+MAE / RMSE           1.43 / 1.82 years
+APE / CV             18.5% / 26.2%
+Bowker symmetry      chi2=10.33, df=13, p=0.666
+baseline: always 5  20.8% exact
+
+age   n   mean pred   95% CI
+  1   3        4.20   [-0.92, 9.31]
+  2   5        2.42   [1.10, 3.75]
+  3   2        4.38   [-2.67, 11.43]
+  4   4        4.94   [2.44, 7.43]
+  5   5        5.64   [3.92, 7.36]
+  6   3        6.91   [3.06, 10.76]
+  7   2        5.86   [1.16, 10.56]
+
+wrote results/north_test_age_bias.png

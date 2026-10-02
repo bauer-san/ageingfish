@@ -158,8 +158,9 @@ def plot_age_bias(result: dict, path: str, title: str = "Age-bias plot") -> None
     ax.plot([lo, hi], [lo, hi], color="#a8a7a2", lw=1, ls="--", zorder=1)
     ax.errorbar(ages, means, yerr=err, fmt="o", color="#2a78d6", ms=6, lw=2, capsize=0, zorder=2)
     for age, mean, row in zip(ages, means, rows):
-        ax.annotate("n={}".format(row["n"]), (age, mean), xytext=(6, -10), textcoords="offset points",
-                    fontsize=8, color="#52514e")
+        low = mean if math.isnan(row["ci_low"]) else row["ci_low"]
+        ax.annotate("n={}".format(row["n"]), (age, low), xytext=(0, -6), textcoords="offset points",
+                    ha="center", va="top", fontsize=7, color="#52514e")
     ax.set_xlim(lo, hi)
     ax.set_ylim(lo, hi)
     ax.set_aspect("equal")
@@ -184,14 +185,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     source.add_argument("--dataset", choices=["north", "baltic"], help="use Thünen reference ages")
     source.add_argument("--truth", help="CSV with columns image,age (e.g. your own labels.csv)")
     parser.add_argument("--species", help="score only this species (north: cod, saithe, haddock, whiting)")
+    parser.add_argument("--split", choices=["dev", "test"],
+                        help="with --dataset: score only this split (see thuenen.split_of)")
     parser.add_argument("--by-species", action="store_true", help="also report each species separately")
     parser.add_argument("--plot", help="write an age-bias plot to this PNG")
     args = parser.parse_args(argv)
+    if args.split and not args.dataset:
+        parser.error("--split needs --dataset")
 
     predictions = {k: float(v) for k, v in read_csv_column(args.predictions, "predicted_age").items()}
     if args.dataset:
-        from .thuenen import load_dataset
+        from .thuenen import load_dataset, split_of
         records = load_dataset(args.dataset, species=args.species)
+        if args.split:
+            records = [r for r in records if split_of(r.image) == args.split]
         truth = {r.image: r.age for r in records}
         species = {r.image: r.species for r in records}
     else:
@@ -219,6 +226,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     result = score([truth[i] for i in images], [predictions[i] for i in images])
     title = "Thünen {}".format(args.dataset) if args.dataset else "reference: {}".format(args.truth)
+    if args.dataset and args.split:
+        title += " {} split".format(args.split)
     if args.species:
         title += " ({})".format(args.species)
     print(format_report(result, title))

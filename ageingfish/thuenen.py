@@ -6,6 +6,7 @@ Images are matched by filename anywhere under the folder you unzipped them to.
 """
 import csv
 import glob
+import hashlib
 import json
 import os
 import re
@@ -55,6 +56,16 @@ def load_labels(dataset: str) -> List[OtolithRecord]:
     else:
         raise ValueError("dataset must be one of {}, got {!r}".format(DATASETS, dataset))
     return sorted(records, key=lambda r: r.image)
+
+
+def split_of(image: str) -> str:
+    """Fixed ~30/70 split by filename hash: "dev" (tune here) or "test" (report here).
+
+    Hashing keeps the split stable as files are added and independent of order.
+    All development of ageingfish.ringcount looked only at "dev" images.
+    """
+    bucket = int(hashlib.md5(os.path.basename(image).encode()).hexdigest(), 16) % 10
+    return "dev" if bucket < 3 else "test"
 
 
 def find_images(image_root: str) -> Dict[str, str]:
