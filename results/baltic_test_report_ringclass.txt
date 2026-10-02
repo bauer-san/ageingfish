@@ -1,0 +1,19 @@
+Thünen baltic test split
+------------------------
+n                    804
+exact agreement      61.2%
+within +/-1 year     95.6%
+mean bias (pred-ref) -0.01 years
+MAE / RMSE           0.50 / 0.69 years
+APE / CV             11.7% / 16.5%
+Bowker symmetry      chi2=101.57, df=10, p=2.64e-17
+baseline: always 3  28.2% exact
+
+age   n   mean pred   95% CI
+  1 168        1.61   [1.51, 1.72]
+  2 198        2.01   [1.94, 2.08]
+  3 227        2.97   [2.92, 3.03]
+  4 180        3.60   [3.52, 3.68]
+  5  31        3.83   [3.49, 4.17]
+
+wrote results/baltic_test_age_bias_ringclass.png

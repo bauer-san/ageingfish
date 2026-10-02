@@ -7,6 +7,8 @@ Estimating fish age by counting annuli in otolith images.
 - `ageingfish/scoring.py`: scores predicted ages against reference ages.
 - `ageingfish/ringcount.py`: classical annulus counter (no machine learning) that writes predicted ages.
 - `ageingfish/tune.py`: picks the counter's settings and age calibration on a development split.
+- `ageingfish/ringclass.py`: learned ring detector trained on Thünen's ring annotations, combined
+  with the classical count (best results so far; model in `models/ringclass.joblib`).
 
 ```
 pip install -r requirements.txt
@@ -79,17 +81,18 @@ of labelled fish, then run `ringcount --images DIR --config ...` on the rest.
 
 Settings and calibration were chosen on the dev split only (`configs/`); these numbers are on the
 test split, which was never looked at during development. Full reports and age-bias plots are in
-`results/`.
+`results/` (`*_ringclass*` files are the learned detector below).
 
-| Test split | n | Exact | Within ±1 year | MAE | Mean bias | Baseline exact (always modal age) |
-|---|---|---|---|---|---|---|
-| North Sea, all | 462 | 31.8% | 76.6% | 1.07 y | −0.01 y | 13.6% |
-| saithe | 253 | 36.4% | 85.4% | 0.86 y | −0.10 y | 16.6% |
-| cod | 131 | 30.5% | 69.5% | 1.24 y | −0.16 y | 16.0% |
-| haddock | 54 | 18.5% | 63.0% | 1.44 y | +0.43 y | 18.5% |
-| whiting | 24 | 20.8% | 54.2% | 1.43 y | +0.91 y | 20.8% |
-| Baltic cod | 804 | 52.5% | 92.4% | 0.64 y | +0.00 y | 28.2% |
+| Test split | n | Classical: exact / ±1 y / MAE | + ring classifier: exact / ±1 y / MAE | Baseline exact |
+|---|---|---|---|---|
+| North Sea, all | 462 | 31.8% / 76.6% / 1.07 y | 30.7% / 80.7% / 1.00 y | 13.6% |
+| saithe | 253 | 36.4% / 85.4% / 0.86 y | 34.8% / 87.0% / 0.83 y | 16.6% |
+| cod | 131 | 30.5% / 69.5% / 1.24 y | 29.8% / 74.8% / 1.16 y | 16.0% |
+| haddock | 54 | 18.5% / 63.0% / 1.44 y | 22.2% / 70.4% / 1.28 y | 18.5% |
+| whiting | 24 | 20.8% / 54.2% / 1.43 y | 12.5% / 70.8% / 1.23 y | 20.8% |
+| Baltic cod | 804 | 52.5% / 92.4% / 0.64 y | **61.2% / 95.6% / 0.50 y** | 28.2% |
 
+Baseline: always predict the most common age.
 Dev-split results were similar (North MAE 1.06, Baltic 0.60), so the tuning did not overfit.
 For comparison, Thünen's deep-learning models reached about 72% mean accuracy on the Baltic set
 (Sigurðardóttir et al. 2024), under a different evaluation setup.
@@ -109,3 +112,31 @@ Known weaknesses, visible in `results/examples/` and the age-bias plots:
   52.5% exact). `load_profile(path, core=(x, y))` accepts a known core for experiments.
 - **Fine rings near the core and compressed rings at the edge of old fish** are lost by a single
   smoothing scale.
+
+## Learned ring detector
+
+`ageingfish/ringclass.py` classifies every position along each reading line as inside an annulus
+or not, using 19 scale-free features (multi-scale band contrast and curvature, agreement with the
+parallel lines, distance from core and tip, section thickness). Labels come from Thünen's ring
+polygons, using only dev-split images with complete annotations (exactly 2 × age polygons) and
+only reading lines that cross every one of them. Predicted ring segments are counted per line and
+averaged, and each dataset gets a calibration
+`age = c0 + c1 × classical count + c2 × learned count`.
+
+The counting rule and calibration are chosen from out-of-fold probabilities (5 folds grouped by
+image), so they reflect unseen images; the final classifier is then trained on all dev labels.
+Position-level out-of-fold AUC was about 0.88.
+
+```
+git clone https://github.com/arjaycc/ai_otolith   # ring annotations
+python -m ageingfish.ringclass train --images-north ~/data/datasets_north \
+    --images-baltic ~/data/datasets_baltic --annotations ai_otolith --out models/ringclass.joblib
+python -m ageingfish.ringclass predict --model models/ringclass.joblib --dataset baltic \
+    --split test --images ~/data/datasets_baltic --out results/baltic_test_predictions_ringclass.csv
+```
+
+On dev (cross-validated), the classical count alone gave MAE 1.07 / 0.61 years (North / Baltic),
+the learned count alone 1.25 / 0.50, and the combination 1.05 / 0.49, which is why both are kept.
+The learned detector helps most on Baltic cod and reduces the pull toward the middle there
+(1-year-olds predicted 1.6 instead of 2.0), but the North Sea gain is small; old fish are still
+under-aged (age 11 predicted about 9.2).

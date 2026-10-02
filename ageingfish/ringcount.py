@@ -44,6 +44,8 @@ class Profile:
     thickness: np.ndarray   # smoothed top-to-bottom height of the section per position
     gray: np.ndarray        # rotated working image (for plotting)
     mask: np.ndarray        # rotated otolith mask (for plotting)
+    lines: Optional[np.ndarray] = None  # row of each reading line at each column, like values
+    work: Optional["Working"] = None    # geometry, for mapping original-image points
 
 
 @dataclass
@@ -205,9 +207,10 @@ def load_profile(path: str, band: float = 0.012, core: Optional[Tuple[float, flo
 
     half = max(1, int(round(band * length)))
     halfthick = np.nan_to_num(bottom - top) / 2
-    rows = []
+    rows, lines = [], []
     for offset in OFFSETS:
         centre = mid + offset * halfthick
+        lines.append(centre)
         row = np.full(len(x), np.nan)
         for i, c in enumerate(x):
             r0 = max(int(round(centre[i])) - half, 0)
@@ -220,7 +223,7 @@ def load_profile(path: str, band: float = 0.012, core: Optional[Tuple[float, flo
     values = np.array(rows)
 
     thickness = ndimage.gaussian_filter1d(np.nan_to_num(bottom - top), 0.03 * length)
-    return Profile(values, x, mid, core_index, thickness, gray, mask)
+    return Profile(values, x, mid, core_index, thickness, gray, mask, np.array(lines), work)
 
 
 def filtered_signal(values: np.ndarray, polarity: int, detrend: float, smooth: float) -> Tuple[np.ndarray, float]:
