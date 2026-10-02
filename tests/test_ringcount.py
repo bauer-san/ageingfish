@@ -73,7 +73,7 @@ def test_cli_writes_predictions_and_skips_bad_images(tmp_path, capsys):
 
 
 def test_tune_recovers_ring_age_relation(tmp_path, monkeypatch):
-    monkeypatch.setattr(tune, "GRID", {"polarity": [1, -1], "detrend": [0.1], "smooth": [0.004],
+    monkeypatch.setattr(tune, "GRID", {"core_detector": ["midpoint"], "polarity": [1, -1], "detrend": [0.1], "smooth": [0.004],
                                        "min_gap": [0.015], "prominence": [0.5], "edge_trim": [0.02],
                                        "core_trim": [0.0]})
     ages = [2, 3, 4, 5, 6]
@@ -81,3 +81,38 @@ def test_tune_recovers_ring_age_relation(tmp_path, monkeypatch):
     params, metrics = tune.tune(paths, ages, workers=1)
     assert params.slope > 0
     assert metrics["mae"] < 0.3 and metrics["exact_pct"] == 100
+
+
+def test_to_work_maps_original_points_through_resize_and_rotation(tmp_path):
+    # A tilted bright ellipse with a dark spot; the spot must land on the spot after prepare().
+    h, w = 500, 1200
+    yy, xx = np.mgrid[0:h, 0:w]
+    a = np.radians(20)
+    u = (xx - 600) * np.cos(a) + (yy - 250) * np.sin(a)
+    v = -(xx - 600) * np.sin(a) + (yy - 250) * np.cos(a)
+    image = np.where((u / 450) ** 2 + (v / 150) ** 2 <= 1, 200.0, 5.0)
+    spot = (780, 300)
+    image[(xx - spot[0]) ** 2 + (yy - spot[1]) ** 2 <= 36] = 0
+    path = tmp_path / "tilted.png"
+    Image.fromarray(image.astype(np.uint8)).save(path)
+
+    work = ringcount.prepare(str(path))
+    x, y = work.to_work(*spot)
+    inside = ndimage_dark_centre(work.gray, work.mask)
+    assert abs(x - inside[0]) < 3 and abs(y - inside[1]) < 3
+
+
+def ndimage_dark_centre(gray, mask):
+    from scipy import ndimage
+    dark = (gray < 100) & ndimage.binary_erosion(mask, iterations=3)
+    ys, xs = np.nonzero(dark)
+    return xs.mean(), ys.mean()
+
+
+def test_known_core_overrides_detector(tmp_path):
+    path = synthetic_otolith(tmp_path / "o.png", 3)
+    auto = ringcount.load_profile(path, detector="midpoint")
+    # 150 px from the centre in original pixels; the image is resized ~1000/756
+    # and may be rotated 180 degrees, so check the distance moved, not the side.
+    moved = ringcount.load_profile(path, core=(300, 200))
+    assert 170 < abs(moved.core_index - auto.core_index) < 230

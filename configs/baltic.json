@@ -5,9 +5,9 @@
   },
   "dev_metrics": {
     "n": 351,
-    "mae": 0.603,
+    "mae": 0.601,
     "exact_pct": 55.3,
-    "count_age_correlation": 0.668
+    "count_age_correlation": 0.671
   },
   "params": {
     "polarity": 1,
@@ -17,10 +17,15 @@
     "prominence": 0.5,
     "edge_trim": 0.12,
     "core_trim": 0.0,
-    "intercept": -0.13542335197579614,
-    "slope": 0.7681205303933256
+    "intercept": -0.1507107760264162,
+    "slope": 0.7732369085559301,
+    "core_detector": "midpoint"
   },
   "grid": {
+    "core_detector": [
+      "thickness",
+      "midpoint"
+    ],
     "polarity": [
       1,
       -1

@@ -57,6 +57,7 @@ class Params:
     core_trim: float = 0.03    # ignore this fraction of length either side of the core
     intercept: float = 0.0     # age = intercept + slope * tip-to-tip ring count
     slope: float = 0.5
+    core_detector: str = "thickness"  # key of CORE_DETECTORS
 
     @classmethod
     def load(cls, path: str) -> "Params":
@@ -107,9 +108,26 @@ def _long_axis_angle(mask: np.ndarray) -> float:
     return math.degrees(math.atan2(vy, vx))
 
 
-def load_profile(path: str, band: float = 0.012) -> Profile:
-    """Midline brightness profile for one image. band is the half-height of the
-    averaging strip around the midline, as a fraction of otolith length."""
+@dataclass
+class Working:
+    """An otolith resized to WORK_LENGTH and rotated so its long axis is horizontal."""
+    gray: np.ndarray
+    mask: np.ndarray
+    scale: float
+    angle: float
+    resized_shape: Tuple[int, int]
+
+    def to_work(self, x: float, y: float) -> Tuple[float, float]:
+        """Map a point in original image pixels to working (resized, rotated) pixels."""
+        x, y = x * self.scale, y * self.scale
+        a = math.radians(self.angle)
+        cx, cy = (self.resized_shape[1] - 1) / 2, (self.resized_shape[0] - 1) / 2
+        ox, oy = (self.gray.shape[1] - 1) / 2, (self.gray.shape[0] - 1) / 2
+        dx, dy = x - cx, y - cy
+        return ox + math.cos(a) * dx + math.sin(a) * dy, oy - math.sin(a) * dx + math.cos(a) * dy
+
+
+def prepare(path: str) -> Working:
     image = Image.open(path).convert("L")
     # A first pass at low resolution finds the otolith size for rescaling.
     small = image.copy()
@@ -118,25 +136,72 @@ def load_profile(path: str, band: float = 0.012) -> Profile:
     ys, xs = np.nonzero(small_mask)
     extent = max(np.ptp(xs), np.ptp(ys)) * image.width / small.width
     scale = WORK_LENGTH / max(extent, 1)
-    image = image.resize((max(1, round(image.width * scale)), max(1, round(image.height * scale))),
-                         Image.BILINEAR)
+    size = (max(1, round(image.width * scale)), max(1, round(image.height * scale)))
+    image = image.resize(size, Image.BILINEAR)
+    scale = size[0] / Image.open(path).width
 
     gray = np.asarray(image, dtype=float)
     mask = segment(gray)
     angle = _long_axis_angle(mask)
-    gray = ndimage.rotate(gray, angle, reshape=True, order=1)
-    mask = ndimage.rotate(mask.astype(float), angle, reshape=True, order=0) > 0.5
+    rotated = ndimage.rotate(gray, angle, reshape=True, order=1)
+    rotated_mask = ndimage.rotate(mask.astype(float), angle, reshape=True, order=0) > 0.5
+    return Working(rotated, rotated_mask, scale, angle, gray.shape)
 
+
+def _edges(mask: np.ndarray):
+    """Columns spanned by the otolith and its top and bottom edge in each."""
     cols = np.nonzero(mask.any(axis=0))[0]
-    length = np.ptp(cols) + 1
     x = np.arange(cols.min(), cols.max() + 1)
     top = np.array([np.argmax(mask[:, c]) if mask[:, c].any() else np.nan for c in x], dtype=float)
     bottom = np.array([mask.shape[0] - 1 - np.argmax(mask[::-1, c]) if mask[:, c].any() else np.nan
                        for c in x], dtype=float)
+    return x, top, bottom
+
+
+def core_by_thickness(work: Working) -> Tuple[float, float]:
+    """Core guess: the thickest point of the section (top-to-bottom height),
+    restricted to the middle half so a bulging tip cannot win. The row is NaN,
+    meaning "on the midline"."""
+    x, top, bottom = _edges(work.mask)
+    thickness = ndimage.gaussian_filter1d(np.nan_to_num(bottom - top), 0.03 * len(x))
+    lo, hi = len(x) // 4, 3 * len(x) // 4
+    i = lo + int(np.argmax(thickness[lo:hi]))
+    return float(x[i]), float("nan")
+
+
+def core_by_midpoint(work: Working) -> Tuple[float, float]:
+    """Core guess: halfway along the long axis, on the midline."""
+    x, _, _ = _edges(work.mask)
+    return float((x[0] + x[-1]) / 2), float("nan")
+
+
+CORE_DETECTORS = {"thickness": core_by_thickness, "midpoint": core_by_midpoint}
+
+
+def load_profile(path: str, band: float = 0.012, core: Optional[Tuple[float, float]] = None,
+                 detector: str = "thickness") -> Profile:
+    """Brightness profiles along reading lines for one image.
+
+    band is the half-height of the averaging strip around each line, as a
+    fraction of otolith length. core, if given, is the core position in
+    original image pixels; otherwise it comes from CORE_DETECTORS[detector].
+    The reading path follows the midline near the tips and bends to pass
+    through the core.
+    """
+    work = prepare(path)
+    gray, mask = work.gray, work.mask
+    x, top, bottom = _edges(mask)
+    length = len(x)
     mid = (top + bottom) / 2
     good = ~np.isnan(mid)
     mid = np.interp(np.arange(len(x)), np.nonzero(good)[0], mid[good])
     mid = ndimage.gaussian_filter1d(mid, 0.02 * length)
+
+    core_x, core_y = work.to_work(*core) if core is not None else CORE_DETECTORS[detector](work)
+    core_index = int(np.clip(round(core_x - x[0]), 0, length - 1))
+    # Bend the path through the core, fading back to the midline toward the tips.
+    shift = 0.0 if math.isnan(core_y) else core_y - mid[core_index]
+    mid = mid + shift * np.exp(-0.5 * ((np.arange(length) - core_index) / (0.15 * length)) ** 2)
 
     half = max(1, int(round(band * length)))
     halfthick = np.nan_to_num(bottom - top) / 2
@@ -154,11 +219,7 @@ def load_profile(path: str, band: float = 0.012) -> Profile:
         rows.append(np.interp(np.arange(len(row)), np.nonzero(good)[0], row[good]))
     values = np.array(rows)
 
-    # Core: the thickest point of the section (where top-to-bottom height peaks),
-    # restricted to the middle half so a bulging tip cannot win.
     thickness = ndimage.gaussian_filter1d(np.nan_to_num(bottom - top), 0.03 * length)
-    lo, hi = len(x) // 4, 3 * len(x) // 4
-    core_index = lo + int(np.argmax(thickness[lo:hi]))
     return Profile(values, x, mid, core_index, thickness, gray, mask)
 
 
@@ -242,7 +303,7 @@ def plot_profile(profile: Profile, p: Params, path: str, title: Optional[str] = 
 def _predict_one(job):
     path, params, plot_path = job
     try:
-        profile = load_profile(path)
+        profile = load_profile(path, detector=params.core_detector)
     except Exception as e:  # unreadable image or no otolith found
         return path, None, None, repr(e)
     if plot_path:

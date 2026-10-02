@@ -88,7 +88,7 @@ test split, which was never looked at during development. Full reports and age-b
 | cod | 131 | 30.5% | 69.5% | 1.24 y | −0.16 y | 16.0% |
 | haddock | 54 | 18.5% | 63.0% | 1.44 y | +0.43 y | 18.5% |
 | whiting | 24 | 20.8% | 54.2% | 1.43 y | +0.91 y | 20.8% |
-| Baltic cod | 804 | 52.0% | 92.3% | 0.64 y | +0.00 y | 28.2% |
+| Baltic cod | 804 | 52.5% | 92.4% | 0.64 y | +0.00 y | 28.2% |
 
 Dev-split results were similar (North MAE 1.06, Baltic 0.60), so the tuning did not overfit.
 For comparison, Thünen's deep-learning models reached about 72% mean accuracy on the Baltic set
@@ -99,7 +99,13 @@ Known weaknesses, visible in `results/examples/` and the age-bias plots:
 - **Pull toward the middle.** The calibration shrinks toward the mean age: Baltic 1-year-olds are
   predicted about 2.0 and 5-year-olds about 3.7 (Bowker's test p < 1e-30). Better ring evidence,
   not a different calibration, is the fix.
-- **Core position.** The core is taken as the thickest part of the section, which can miss the true core
-  (see `results/examples/north_example.png`), and the midline can pass beside the core rather than through it.
+- **Core position matters little for this counter.** Using Thünen's ring annotations on dev images
+  (235 otoliths whose annotation count matched 2 × age), the thickest-point core guess was off by a
+  median 10% of otolith length, and simply taking the midpoint of the long axis was off by 2–4%.
+  But plugging in the *annotated* core improved dev MAE only from 0.85 to 0.80 years (North) and
+  0.59 to 0.57 (Baltic), because rings are counted tip to tip and the core only decides which side
+  a ring falls on. `tune` now chooses between the `thickness` and `midpoint` core rules; it kept
+  `thickness` for the North Sea and picked `midpoint` for the Baltic (held-out change: 52.0% to
+  52.5% exact). `load_profile(path, core=(x, y))` accepts a known core for experiments.
 - **Fine rings near the core and compressed rings at the edge of old fish** are lost by a single
   smoothing scale.

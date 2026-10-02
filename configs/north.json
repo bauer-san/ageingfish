@@ -18,9 +18,14 @@
     "edge_trim": 0.05,
     "core_trim": 0.06,
     "intercept": -3.7549019125834655,
-    "slope": 0.9246804810571287
+    "slope": 0.9246804810571287,
+    "core_detector": "thickness"
   },
   "grid": {
+    "core_detector": [
+      "thickness",
+      "midpoint"
+    ],
     "polarity": [
       1,
       -1

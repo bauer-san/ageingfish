@@ -21,6 +21,7 @@ from . import thuenen
 from .ringcount import Params, filtered_signal, find_rings, load_profile, split_sides
 
 GRID = {
+    "core_detector": ["thickness", "midpoint"],
     "polarity": [1, -1],
     "detrend": [0.06, 0.1, 0.15, 0.2],
     "smooth": [0.004, 0.008, 0.012],
@@ -29,6 +30,7 @@ GRID = {
     "edge_trim": [0.05, 0.08, 0.12],
     "core_trim": [0.0, 0.03, 0.06],
 }
+_PROFILE_KEYS = ("core_detector",)
 _SIGNAL_KEYS = ("polarity", "detrend", "smooth")
 _PEAK_KEYS = ("min_gap", "prominence")
 _SIDE_KEYS = ("edge_trim", "core_trim")
@@ -41,25 +43,28 @@ def _grid(keys):
 def _counts(path):
     """Tip-to-tip ring count, averaged over reading lines, for every grid point.
 
-    Shape (signal combos, peak combos, side combos). Filtering is the slow
-    part, so it runs once per signal combo and the cheap steps loop inside.
+    Shape (profile combos, signal combos, peak combos, side combos). Profiles
+    and filtering are the slow parts, so the cheap steps loop inside them.
     """
-    try:
-        profile = load_profile(path)
-    except Exception as e:
-        return None, repr(e)
+    profiles = _grid(_PROFILE_KEYS)
     signals, peaks_grid, sides = _grid(_SIGNAL_KEYS), _grid(_PEAK_KEYS), _grid(_SIDE_KEYS)
-    out = np.zeros((len(signals), len(peaks_grid), len(sides)))
-    for row in profile.values:
-        n = len(row)
-        for si, (polarity, detrend, smooth) in enumerate(signals):
-            signal, spread = filtered_signal(row, polarity, detrend, smooth)
-            for pi, (min_gap, prominence) in enumerate(peaks_grid):
-                peaks = find_rings(signal, spread, min_gap, prominence)
-                for ei, (edge_trim, core_trim) in enumerate(sides):
-                    left, right = split_sides(peaks, n, profile.core_index, edge_trim, core_trim)
-                    out[si, pi, ei] += len(left) + len(right)
-    return out / len(profile.values), None
+    out = np.zeros((len(profiles), len(signals), len(peaks_grid), len(sides)))
+    for di, (detector,) in enumerate(profiles):
+        try:
+            profile = load_profile(path, detector=detector)
+        except Exception as e:
+            return None, repr(e)
+        for row in profile.values:
+            n = len(row)
+            for si, (polarity, detrend, smooth) in enumerate(signals):
+                signal, spread = filtered_signal(row, polarity, detrend, smooth)
+                for pi, (min_gap, prominence) in enumerate(peaks_grid):
+                    peaks = find_rings(signal, spread, min_gap, prominence)
+                    for ei, (edge_trim, core_trim) in enumerate(sides):
+                        left, right = split_sides(peaks, n, profile.core_index, edge_trim, core_trim)
+                        out[di, si, pi, ei] += len(left) + len(right)
+        out[di] /= len(profile.values)
+    return out, None
 
 
 def tune(paths, ages, workers=0):
@@ -74,9 +79,11 @@ def tune(paths, ages, workers=0):
     ages = np.asarray(ages, dtype=float)[keep]
 
     best = None
+    profiles = _grid(_PROFILE_KEYS)
     signals, peaks_grid, sides = _grid(_SIGNAL_KEYS), _grid(_PEAK_KEYS), _grid(_SIDE_KEYS)
-    for si, pi, ei in itertools.product(range(len(signals)), range(len(peaks_grid)), range(len(sides))):
-        total = counts[:, si, pi, ei]
+    for di, si, pi, ei in itertools.product(range(len(profiles)), range(len(signals)),
+                                            range(len(peaks_grid)), range(len(sides))):
+        total = counts[:, di, si, pi, ei]
         if total.std() == 0:
             continue
         slope, intercept = np.polyfit(total, ages, 1)
@@ -84,7 +91,8 @@ def tune(paths, ages, workers=0):
         mae = float(np.mean(np.abs(predicted - ages)))
         if best is None or mae < best[0]:
             exact = float(np.mean(np.floor(predicted + 0.5) == ages))
-            values = dict(zip(_SIGNAL_KEYS, signals[si]), **dict(zip(_PEAK_KEYS, peaks_grid[pi])),
+            values = dict(zip(_PROFILE_KEYS, profiles[di]), **dict(zip(_SIGNAL_KEYS, signals[si])),
+                          **dict(zip(_PEAK_KEYS, peaks_grid[pi])),
                           **dict(zip(_SIDE_KEYS, sides[ei])))
             best = (mae, exact, float(np.corrcoef(total, ages)[0, 1]),
                     Params(intercept=float(intercept), slope=float(slope), **values))
